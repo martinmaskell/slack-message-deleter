@@ -75,17 +75,17 @@ class SlackMessageDeleter:
         all_users = {}
 
         while more:
-            r = self.__get_users(cursor)
-            if not r['ok']:
+            users_response = self.__get_users(cursor)
+            if not users_response['ok']:
                 return all_users
 
-            if 'next_cursor' in r['response_metadata'] and len(r['response_metadata']['next_cursor']) > 0:
-                cursor = r['response_metadata']['next_cursor']
+            if 'next_cursor' in users_response['response_metadata'] and len(users_response['response_metadata']['next_cursor']) > 0:
+                cursor = users_response['response_metadata']['next_cursor']
             else:
                 more = False
                 cursor = None
 
-            for user in r['members']:
+            for user in users_response['members']:
                 all_users[user['id']] = user['name']
 
         return all_users

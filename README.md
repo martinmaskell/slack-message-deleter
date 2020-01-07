@@ -10,6 +10,7 @@ Simply use the Dev Tools in Chrome to inspect the network traffic for any XHR re
 Look in the Headers tab and you'll find these constant values :
 
 TOKEN - This is in the Form Data section
+
 COOKIE - This is found in the Request Headers section
 
 The last value you'll need is to set the USER constant, which you can find if you go to your profile page and copy the string from the last part of the URL.

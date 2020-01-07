@@ -14,174 +14,200 @@ COOKIE = '<< insert cookie string here >>'
 # Inspect your username element, you'll see it at the end of the href
 USER = '<< insert user string here. e.g. ABCDE1FG2 >> '
 
-RATE_LIMIT_DELAY_MILLISECONDS = 4000
 
+class SlackMessageDeleter:
 
-def get_request_headers():
-    return {
-        'authority': WORKSPACE,
-        'cookie': COOKIE,
-        'origin': 'https://app.slack.com'
-    }
+    DEFAULT_DELETE_DELAY_IN_SECONDS = 0.2
 
+    def __init__(self, workspace, token, cookie, user):
+        self.__workspace = workspace
+        self.__token = token
+        self.__cookie = cookie
+        self.__user = user
+        self.__message_delete_delay_in_seconds = self.DEFAULT_DELETE_DELAY_IN_SECONDS
+        self.__delay_delete_request_enabled = False
 
-def build_base_form_data():
-    return {
-        'token': TOKEN,
-    }
+    def __get_request_headers(self):
+        return {
+            'authority': self.__workspace,
+            'cookie': self.__cookie,
+            'origin': 'https://app.slack.com'
+        }
 
+    def __build_base_form_data(self):
+        return {
+            'token': self.__token,
+        }
 
-def send_request(method, cursor, params):
-    form_data = build_base_form_data()
+    def __send_request(self, method, cursor, params):
+        form_data = self.__build_base_form_data()
 
-    if cursor is not None:
-        form_data['cursor'] = cursor
+        if cursor is not None:
+            form_data['cursor'] = cursor
 
-    query = urllib.parse.urlencode(params)
+        query = urllib.parse.urlencode(params)
 
-    try:
-        response = requests.post(
-            f'https://{WORKSPACE}/api/{method}?{query}',
-            headers=get_request_headers(),
-            data=form_data
-        )
-    except Exception as e:
-        return {'ok': False, 'exception': e}
+        try:
+            response = requests.post(
+                f'https://{self.__workspace}/api/{method}?{query}',
+                headers=self.__get_request_headers(),
+                data=form_data
+            )
+        except Exception as e:
+            return {'ok': False, 'exception': e}
 
-    return response.json()
+        return response.json()
 
+    def __get_conversations_history(self, cursor, channel):
+        return self.__send_request('conversations.history', cursor, {'channel': channel, 'limit': 200})
 
-def get_conversations_history(cursor, channel):
-    return send_request('conversations.history', cursor, {'channel': channel, 'limit': 200})
+    def __get_conversations_list(self, cursor):
+        return self.__send_request('conversations.list', cursor, {'types': 'public_channel,private_channel,mpim,im',
+                                                                  'limit': 100})
 
+    def __get_users(self, cursor):
+        return self.__send_request('users.list', cursor, {'limit': 20})
 
-def get_conversations_list(cursor):
-    return send_request('conversations.list', cursor, {'types': 'public_channel,private_channel,mpim,im', 'limit': 100})
+    def __get_all_users(self):
+        cursor = None
+        more = True
 
+        all_users = {}
 
-def get_users(cursor):
-    return send_request('users.list', cursor, {'limit': 20})
+        while more:
+            r = self.__get_users(cursor)
+            if not r['ok']:
+                return all_users
 
+            if 'next_cursor' in r['response_metadata'] and len(r['response_metadata']['next_cursor']) > 0:
+                cursor = r['response_metadata']['next_cursor']
+            else:
+                more = False
+                cursor = None
 
-def get_all_users():
-    cursor = None
-    more = True
+            for user in r['members']:
+                all_users[user['id']] = user['name']
 
-    users = {}
+        return all_users
 
-    while more:
-        r = get_users(cursor)
-        if not r['ok']:
-            return users
+    def __get_user_messages(self, user, channel):
+        cursor = None
+        more_messages = True
 
-        if 'next_cursor' in r['response_metadata'] and len(r['response_metadata']['next_cursor']) > 0:
-            cursor = r['response_metadata']['next_cursor']
-        else:
-            more = False
-            cursor = None
+        user_messages = []
 
-        for user in r['members']:
-            users[user['id']] = user['name']
+        while more_messages:
+            conversation_dictionary = self.__get_conversations_history(cursor, channel)
+            if not conversation_dictionary['ok']:
+                return user_messages
 
-    return users
+            if 'has_more' in conversation_dictionary and conversation_dictionary['has_more']:
+                cursor = conversation_dictionary['response_metadata']['next_cursor']
+            else:
+                more_messages = False
+                cursor = None
 
+            for message in conversation_dictionary['messages']:
+                if 'user' in message and message['user'] == user:
+                    user_messages.append(message)
 
-def get_user_messages(user, channel):
-    cursor = None
-    more_messages = True
+        return user_messages
 
-    user_messages = []
+    def __get_channels(self):
+        cursor = None
+        more_channels = True
 
-    while more_messages:
-        r = get_conversations_history(cursor, channel)
-        if not r['ok']:
-            return user_messages
+        active_channels = []
 
-        if 'has_more' in r and r['has_more']:
-            cursor = r['response_metadata']['next_cursor']
-        else:
-            more_messages = False
-            cursor = None
+        while more_channels:
+            conversations_dictionary = self.__get_conversations_list(cursor)
+            if 'ok' not in conversations_dictionary or not conversations_dictionary['ok']:
+                return active_channels
 
-        for message in r['messages']:
-            if 'user' in message and message['user'] == user:
-                user_messages.append(message)
+            if 'has_more' in conversations_dictionary and conversations_dictionary['has_more']:
+                cursor = conversations_dictionary['response_metadata']['next_cursor']
+            else:
+                more_channels = False
+                cursor = None
 
-    return user_messages
+            for channel in conversations_dictionary['channels']:
+                is_member_of_channel = 'is_member' in channel and channel['is_member']
+                is_group = 'is_group' in channel and channel['is_group']
+                is_dm = 'is_im' in channel and channel['is_im'] and not channel['is_user_deleted']
 
+                if is_member_of_channel or is_group or is_dm:
+                    active_channels.append(channel)
 
-def get_channels():
-    cursor = None
-    more_channels = True
+        return active_channels
 
-    active_channels = []
+    def __delete_message(self, message_timestamp, channel):
 
-    while more_channels:
-        r = get_conversations_list(cursor)
-        if 'ok' not in r or not r['ok']:
-            return active_channels
+        while True:
+            if self.__delay_delete_request_enabled:
+                time.sleep(self.__message_delete_delay_in_seconds)
 
-        if 'has_more' in r and r['has_more']:
-            cursor = r['response_metadata']['next_cursor']
-        else:
-            more_channels = False
-            cursor = None
+            response = requests.post(
+                f'https://{self.__workspace}/api/chat.delete',
+                headers=self.__get_request_headers(),
+                data={
+                    'channel': channel,
+                    'ts': message_timestamp,
+                    'token': self.__token
+                }
+            )
+            response_dictionary = response.json()
 
-        for channel in r['channels']:
-            is_member_of_channel = 'is_member' in channel and channel['is_member']
-            is_group = 'is_group' in channel and channel['is_group']
-            is_dm = 'is_im' in channel and channel['is_im'] and not channel['is_user_deleted']
+            if not response_dictionary['ok'] and response_dictionary['error'] == 'ratelimited':
+                if self.__delay_delete_request_enabled:
+                    self.__message_delete_delay_in_seconds = self.__message_delete_delay_in_seconds + 0.1
+                else:
+                    self.__delay_delete_request_enabled = True
+            else:
+                break
 
-            if is_member_of_channel or is_group or is_dm:
-                active_channels.append(channel)
+    def delete_all_messages(self):
 
-    return active_channels
+        users = self.__get_all_users()
+        channels = self.__get_channels()
 
+        print(f'Delete all your messages from {len(channels)} channels, groups and DMs (Y/N)? ', end='')
+        user_prompt_answer = input()
+        if user_prompt_answer.lower() != 'y':
+            exit()
 
-def delete_message(message_timestamp, channel):
-    while True:
-        response = requests.post(
-            f'https://{WORKSPACE}/api/chat.delete',
-            headers=get_request_headers(),
-            data={
-                'channel': channel,
-                'ts': message_timestamp,
-                'token': TOKEN
-            }
-        )
-        r = response.json()
-        if not r['ok'] and r['error'] == 'ratelimited':
-            time.sleep(RATE_LIMIT_DELAY_MILLISECONDS)
-        else:
-            break
+        print('')
+        for channel in channels:
+            if 'name' in channel:
+                name = channel['name']
+            else:
+                name = users[channel['user']]
+
+            print(f"Deleting messages from {channel['id']} {name}", end='')
+            messages = self.__get_user_messages(self.__user, channel['id'])
+
+            if len(messages) > 0:
+                print(f' ({len(messages):,} messages)...', end='')
+
+            deleted_counter = 0
+
+            for message in messages:
+                self.__delete_message(message["ts"], channel['id'])
+
+                if deleted_counter > 0:
+                    leng = len(str(deleted_counter))
+                    for i in range(leng):
+                        sys.stdout.write('\b')
+
+                deleted_counter = deleted_counter + 1
+                sys.stdout.write(str(deleted_counter))
+
+            print('\r')
+
+        print("DONE!")
 
 
 if __name__ == "__main__":
 
-    users = get_all_users()
-    channels = get_channels()
+    deleter = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
+    deleter.delete_all_messages()
 
-    print(f'Delete all your messages from {len(channels)} channels, groups and DMs (Y/N)? ', end='')
-    answer = input()
-
-    if answer.lower() != 'y':
-        exit()
-
-    print('')
-    for c in channels:
-
-        if 'name' in c:
-            name = c['name']
-        else:
-            name = users[c['user']]
-
-        print(f"Deleting messages from {c['id']} {name}", end='')
-        messages = get_user_messages(USER, c['id'])
-
-        for m in messages:
-            delete_message(m["ts"], c['id'])
-            print('.', end='')
-
-        print('\r')
-
-    print("DONE!")

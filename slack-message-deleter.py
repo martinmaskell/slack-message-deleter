@@ -14,8 +14,6 @@ COOKIE = '<< insert cookie string here >>'
 # Inspect your username element, you'll see it at the end of the href
 USER = '<< insert user string here. e.g. ABCDE1FG2 >> '
 
-# This is in the URL when you click on a Channel or DM
-CHANNEL = '<< insert channel string here. e.g. AAAA6B7CD >>'
 RATE_LIMIT_DELAY_MILLISECONDS = 4000
 
 

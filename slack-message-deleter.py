@@ -2,6 +2,7 @@
 import requests
 import time
 import urllib.parse
+import sys
 
 WORKSPACE = '<< insert your workspace here. e.g. mycompanydevteam.slack.com >>'
 

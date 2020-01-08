@@ -1,4 +1,4 @@
-import os
+from os import path, makedirs
 import requests
 import time
 import urllib.parse
@@ -11,27 +11,27 @@ WORKSPACE = '<< mycompanydevteam.slack.com >>'
 TOKEN = '<< xoxc-123456789012-123456789012-123456789012-f123jj5186rr78f395aecf2ccff281h1234b456789123f45678c4c7984e65a5k >>'
 
 # Get this from Request Headers
-COOKIE = '<< insert cookie string here >>'
+COOKIE_STRING = '<< insert cookie string here >>'
 
 # Inspect your username element, you'll see it at the end of the href
-USER = '<< ABCDE1FG2 >> '
+USER_GUID = '<< ABCDE1FG2 >> '
 
 
 class SlackMessageDeleter:
 
-    DEFAULT_DELETE_DELAY_IN_SECONDS = 0.2
-    FILE_SAVE_FOLDER = 'downloads'
+    _default_delete_delay_in_seconds = 0.2
+    _file_save_folder = 'downloads'
 
     def __init__(self, workspace, token, cookie, user):
         self.__workspace = workspace
         self.__token = token
         self.__cookie = cookie
         self.__user = user
-        self.__message_delete_delay_in_seconds = self.DEFAULT_DELETE_DELAY_IN_SECONDS
+        self.__message_delete_delay_in_seconds = self._default_delete_delay_in_seconds
         self.__delay_delete_request_enabled = False
 
-        if not os.path.exists(self.FILE_SAVE_FOLDER):
-            os.makedirs(self.FILE_SAVE_FOLDER)
+        if not path.exists(self._file_save_folder):
+            makedirs(self._file_save_folder)
 
     @staticmethod
     def __try_parse_int(string, base=10, val=None):
@@ -41,9 +41,9 @@ class SlackMessageDeleter:
             return val
 
     def __get_file_save_path(self, channel_id):
-        path = self.FILE_SAVE_FOLDER + '/' + channel_id
-        if not os.path.exists(path):
-            os.makedirs(path)
+        path = self._file_save_folder + '/' + channel_id
+        if not path.exists(path):
+            makedirs(path)
         return path
 
     @staticmethod
@@ -51,7 +51,7 @@ class SlackMessageDeleter:
         file_name = file['name']
         local_file_path = save_folder + '/' + file_name
 
-        if os.path.isfile(local_file_path):
+        if path.isfile(local_file_path):
             file_name_parts = file_name.split('.')
             name = '.'.join(file_name_parts[0:-1])
             ext = file_name_parts[-1]
@@ -391,6 +391,6 @@ class SlackMessageDeleter:
 
 if __name__ == "__main__":
 
-    slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
+    slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE_STRING, USER_GUID)
     slack.delete_all_messages()
     slack.download_files_from_search()

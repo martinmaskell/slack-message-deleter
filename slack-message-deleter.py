@@ -5,16 +5,16 @@ import urllib.parse
 import sys
 import shutil
 
-WORKSPACE = '<< insert your workspace here. e.g. mycompanydevteam.slack.com >>'
+WORKSPACE = '<< mycompanydevteam.slack.com >>'
 
 # Get this from Form Data
-TOKEN = '<< insert token string here. e.g. xoxc-123456789012-123456789012-123456789012-f123jj5186rr78f395aecf2ccff281h1234b456789123f45678c4c7984e65a5k >>'
+TOKEN = '<< xoxc-123456789012-123456789012-123456789012-f123jj5186rr78f395aecf2ccff281h1234b456789123f45678c4c7984e65a5k >>'
 
 # Get this from Request Headers
 COOKIE = '<< insert cookie string here >>'
 
 # Inspect your username element, you'll see it at the end of the href
-USER = '<< insert user string here. e.g. ABCDE1FG2 >> '
+USER = '<< ABCDE1FG2 >> '
 
 
 class SlackMessageDeleter:
@@ -392,5 +392,5 @@ class SlackMessageDeleter:
 if __name__ == "__main__":
 
     slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
-    # slack.delete_all_messages()
+    slack.delete_all_messages()
     slack.download_files_from_search()

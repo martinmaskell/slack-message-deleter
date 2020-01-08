@@ -19,6 +19,7 @@ USER = '<< insert user string here. e.g. ABCDE1FG2 >> '
 class SlackMessageDeleter:
 
     DEFAULT_DELETE_DELAY_IN_SECONDS = 0.2
+    FILE_SAVE_FOLDER = 'downloadedfiles'
 
     def __init__(self, workspace, token, cookie, user):
         self.__workspace = workspace
@@ -27,6 +28,35 @@ class SlackMessageDeleter:
         self.__user = user
         self.__message_delete_delay_in_seconds = self.DEFAULT_DELETE_DELAY_IN_SECONDS
         self.__delay_delete_request_enabled = False
+
+        if not os.path.exists(self.FILE_SAVE_FOLDER):
+            os.makedirs(self.FILE_SAVE_FOLDER)
+
+    @staticmethod
+    def __try_parse_int(string, base=10, val=None):
+        try:
+            return int(string, base)
+        except ValueError:
+            return val
+
+    def __get_file_save_path(self, channel_id):
+        path = self.FILE_SAVE_FOLDER + '/' + channel_id
+        if not os.path.exists(path):
+            os.makedirs(path)
+        return path
+
+    @staticmethod
+    def __get_file_name_save_path(save_folder, file):
+        file_name = file['name']
+        local_file_path = save_folder + '/' + file_name
+
+        if os.path.isfile(local_file_path):
+            file_name_parts = file_name.split('.')
+            name = '.'.join(file_name_parts[0:-1])
+            ext = file_name_parts[-1]
+            local_file_path = f"{save_folder}/{name}.{str(file['timestamp'])}.{ext}"
+
+        return local_file_path
 
     def __get_request_headers(self):
         return {
@@ -91,7 +121,7 @@ class SlackMessageDeleter:
 
         return all_users
 
-    def __get_user_messages(self, user, channel):
+    def __get_messages(self, user, channel):
         cursor = None
         more_messages = True
 
@@ -109,10 +139,19 @@ class SlackMessageDeleter:
                 cursor = None
 
             for message in conversation_dictionary['messages']:
-                if 'user' in message and message['user'] == user:
+                if user is None or ('user' in message and message['user'] == user):
                     user_messages.append(message)
 
         return user_messages
+
+    @staticmethod
+    def __get_files_from_messages(messages):
+        files = []
+        for m in messages:
+            if 'files' in m:
+                for file in m['files']:
+                    files.append(file)
+        return files
 
     def __get_channels(self):
         cursor = None
@@ -171,8 +210,7 @@ class SlackMessageDeleter:
         users = self.__get_all_users()
         channels = self.__get_channels()
 
-        print(f'Delete all your messages from {len(channels)} channels, groups and DMs (Y/N)? ', end='')
-        user_prompt_answer = input()
+        user_prompt_answer = input(f'Delete all your messages from {len(channels)} channels, groups and DMs (Y/N)? ')
         if user_prompt_answer.lower() != 'y':
             exit()
 
@@ -184,31 +222,81 @@ class SlackMessageDeleter:
                 name = users[channel['user']]
 
             print(f"Deleting messages from {channel['id']} {name}", end='')
-            messages = self.__get_user_messages(self.__user, channel['id'])
+            messages = self.__get_messages(self.__user, channel['id'])
 
             if len(messages) > 0:
                 print(f' ({len(messages):,} messages)...', end='')
 
-            deleted_counter = 0
-
-            for message in messages:
+            for index, message in enumerate(messages, start=1):
                 self.__delete_message(message["ts"], channel['id'])
 
-                if deleted_counter > 0:
-                    leng = len(str(deleted_counter))
-                    for i in range(leng):
+                if index > 1:
+                    index_string_length = len(str(index-1))
+                    for i in range(index_string_length):
                         sys.stdout.write('\b')
 
-                deleted_counter = deleted_counter + 1
-                sys.stdout.write(str(deleted_counter))
+                sys.stdout.write(str(index))
 
             print('\r')
 
         print("DONE!")
 
+    def download_files(self):
+        users = self.__get_all_users()
+        channels = self.__get_channels()
+
+        print('----------------')
+        print('File Downloader')
+        print('----------------')
+
+        for index, channel in enumerate(channels, start=1):
+            if 'name' in channel:
+                name = channel['name']
+            else:
+                name = users[channel['user']]
+
+            print(f'{index}: {name}')
+
+        selected_channel_index = self.__try_parse_int(
+            input(r'Choose a channel from where to download the files: '), 0)
+        if selected_channel_index < 1 or selected_channel_index > len(channels):
+            exit()
+
+        selected_channel = channels[selected_channel_index-1]
+        channel_id = selected_channel['id']
+        save_path = self.__get_file_save_path(channel_id)
+
+        messages = self.__get_messages(None, channel_id)
+        files = self.__get_files_from_messages(messages)
+
+        continue_download_answer = input(f'Download {len(files)} files (Y/N)? ')
+        if continue_download_answer.lower() == 'y':
+
+            print(f'Downloading {len(files)} files...', end='')
+
+            for index, file in enumerate(files, start=1):
+                file_url = file['url_private_download']
+                local_file_path = self.__get_file_name_save_path(save_path, file)
+
+                file_response = requests.get(file_url, headers=self.__get_request_headers(), stream=True)
+                if file_response.status_code == 200:
+                    local_file = open(local_file_path, 'wb')
+                    file_response.raw.decode_content = True
+                    shutil.copyfileobj(file_response.raw, local_file)
+
+                    if index > 1:
+                        index_string_length = len(str(index-1))
+                        for i in range(index_string_length):
+                            sys.stdout.write('\b')
+
+                    sys.stdout.write(str(index))
+
+        print("\rDONE!")
+
 
 if __name__ == "__main__":
 
-    deleter = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
-    deleter.delete_all_messages()
+    slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
+    # slack.delete_all_messages()
+    slack.download_files()
 

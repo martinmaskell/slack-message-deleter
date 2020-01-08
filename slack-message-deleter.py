@@ -1,9 +1,8 @@
-#!/usr/bin/env python3
+import os
 import requests
 import time
 import urllib.parse
 import sys
-import os
 import shutil
 
 WORKSPACE = '<< insert your workspace here. e.g. mycompanydevteam.slack.com >>'
@@ -323,6 +322,22 @@ class SlackMessageDeleter:
 
         return files
 
+    def __filter_file_by_user(self, file):
+        return file['user'] == self.__user
+
+    def __delete_files(self, files):
+        print(f'Deleting {len(files)} files...', end='')
+        for index, file in enumerate(files, start=1):
+            if file['user'] == self.__user:
+                self.__send_request('files.delete', None, {'file': file['id']})
+
+                if index > 1:
+                    index_string_length = len(str(index - 1))
+                    for i in range(index_string_length):
+                        sys.stdout.write('\b')
+
+                sys.stdout.write(str(index))
+
     def download_files_from_search(self):
 
         users = self.__get_all_users()
@@ -365,6 +380,12 @@ class SlackMessageDeleter:
 
                     sys.stdout.write(str(index))
 
+        user_files = list(filter(self.__filter_file_by_user, files))
+
+        delete_files_answer = input(f'\rDelete your {len(user_files)} files (Y/N)? ')
+        if delete_files_answer.lower() == 'y':
+            self.__delete_files(user_files)
+
         print("\rDONE!")
 
 
@@ -373,4 +394,3 @@ if __name__ == "__main__":
     slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
     # slack.delete_all_messages()
     slack.download_files_from_search()
-

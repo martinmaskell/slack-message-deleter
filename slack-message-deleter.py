@@ -3,6 +3,7 @@ import requests
 import time
 import urllib.parse
 import sys
+import shutil
 
 WORKSPACE = '<< insert your workspace here. e.g. mycompanydevteam.slack.com >>'
 
@@ -241,6 +242,16 @@ class SlackMessageDeleter:
 
         print("DONE!")
 
+    @staticmethod
+    def __display_channels(channels, users):
+        for index, channel in enumerate(channels, start=1):
+            if 'name' in channel:
+                name = channel['name']
+            else:
+                name = users[channel['user']]
+
+            print(f'{index}: {name}')
+
     def download_files(self):
         users = self.__get_all_users()
         channels = self.__get_channels()
@@ -249,13 +260,7 @@ class SlackMessageDeleter:
         print('File Downloader')
         print('----------------')
 
-        for index, channel in enumerate(channels, start=1):
-            if 'name' in channel:
-                name = channel['name']
-            else:
-                name = users[channel['user']]
-
-            print(f'{index}: {name}')
+        self.__display_channels(channels, users)
 
         selected_channel_index = self.__try_parse_int(
             input(r'Choose a channel from where to download the files: '), 0)
@@ -280,12 +285,80 @@ class SlackMessageDeleter:
 
                 file_response = requests.get(file_url, headers=self.__get_request_headers(), stream=True)
                 if file_response.status_code == 200:
-                    local_file = open(local_file_path, 'wb')
-                    file_response.raw.decode_content = True
-                    shutil.copyfileobj(file_response.raw, local_file)
+                    self.__save_file(file_response, local_file_path)
 
                     if index > 1:
                         index_string_length = len(str(index-1))
+                        for i in range(index_string_length):
+                            sys.stdout.write('\b')
+
+                    sys.stdout.write(str(index))
+
+        print("\rDONE!")
+
+    @staticmethod
+    def __save_file(file_response, local_file_path):
+        local_file = open(local_file_path, 'wb')
+        file_response.raw.decode_content = True
+        shutil.copyfileobj(file_response.raw, local_file)
+
+    def __files_search(self, channel_id):
+        files = []
+        page = 1
+        total_pages = 0
+        while True:
+            response = self.__send_request('files.list', None, {'channel': channel_id, 'types': 'all', 'page': page})
+            if 'ok' in response and response['ok']:
+                if total_pages == 0:
+                    total_pages = response['paging']['pages']
+
+            for file in response['files']:
+                files.append(file)
+
+            if page == total_pages:
+                break
+
+            page += 1
+
+        return files
+
+    def download_files_from_search(self):
+
+        users = self.__get_all_users()
+        channels = self.__get_channels()
+
+        print('----------------')
+        print('File Downloader')
+        print('----------------')
+
+        self.__display_channels(channels, users)
+
+        selected_channel_index = self.__try_parse_int(
+            input(r'Choose a channel from where to download the files: '), 0)
+        if selected_channel_index < 1 or selected_channel_index > len(channels):
+            exit()
+
+        selected_channel = channels[selected_channel_index - 1]
+        channel_id = selected_channel['id']
+        save_path = self.__get_file_save_path(channel_id)
+
+        files = self.__files_search(channel_id)
+
+        continue_download_answer = input(f'Download {len(files)} files (Y/N)? ')
+        if continue_download_answer.lower() == 'y':
+
+            print(f'Downloading {len(files)} files...', end='')
+
+            for index, file in enumerate(files, start=1):
+                file_url = file['url_private_download']
+                local_file_path = self.__get_file_name_save_path(save_path, file)
+
+                file_response = requests.get(file_url, headers=self.__get_request_headers(), stream=True)
+                if file_response.status_code == 200:
+                    self.__save_file(file_response, local_file_path)
+
+                    if index > 1:
+                        index_string_length = len(str(index - 1))
                         for i in range(index_string_length):
                             sys.stdout.write('\b')
 
@@ -298,5 +371,5 @@ if __name__ == "__main__":
 
     slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE, USER)
     # slack.delete_all_messages()
-    slack.download_files()
+    slack.download_files_from_search()
 

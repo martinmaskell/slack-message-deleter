@@ -41,10 +41,12 @@ class SlackMessageDeleter:
             return val
 
     def __get_file_save_path(self, channel_id):
-        path = self._file_save_folder + '/' + channel_id
-        if not path.exists(path):
-            makedirs(path)
-        return path
+        file_path = self._file_save_folder + '/' + channel_id
+
+        if not file_path.exists(file_path):
+            makedirs(file_path)
+
+        return file_path
 
     @staticmethod
     def __get_file_name_save_path(save_folder, file):
@@ -327,6 +329,7 @@ class SlackMessageDeleter:
 
     def __delete_files(self, files):
         print(f'Deleting {len(files)} files...', end='')
+
         for index, file in enumerate(files, start=1):
             if file['user'] == self.__user:
                 self.__send_request('files.delete', None, {'file': file['id']})
@@ -343,6 +346,10 @@ class SlackMessageDeleter:
         users = self.__get_all_users()
         channels = self.__get_channels()
 
+        if len(channels) < 1:
+            print('Sorry - no channels found.')
+            exit()
+
         print('----------------')
         print('File Downloader')
         print('----------------')
@@ -350,7 +357,9 @@ class SlackMessageDeleter:
         self.__display_channels(channels, users)
 
         selected_channel_index = self.__try_parse_int(
-            input(r'Choose a channel from where to download the files: '), 0)
+            input(r'Choose a channel from where to download the files: '), 0
+        )
+
         if selected_channel_index < 1 or selected_channel_index > len(channels):
             exit()
 
@@ -370,6 +379,7 @@ class SlackMessageDeleter:
                 local_file_path = self.__get_file_name_save_path(save_path, file)
 
                 file_response = requests.get(file_url, headers=self.__get_request_headers(), stream=True)
+
                 if file_response.status_code == 200:
                     self.__save_file(file_response, local_file_path)
 

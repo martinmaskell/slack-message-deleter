@@ -399,7 +399,7 @@ class SlackMessageDeleter:
         print("\rDONE!")
 
 
-if __name__ == "__main__":
+if '__main__' in __name__:
 
     slack = SlackMessageDeleter(WORKSPACE, TOKEN, COOKIE_STRING, USER_GUID)
     slack.delete_all_messages()

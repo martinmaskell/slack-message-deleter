@@ -3,6 +3,7 @@ import requests
 import time
 import urllib.parse
 import sys
+import os
 import shutil
 
 WORKSPACE = '<< insert your workspace here. e.g. mycompanydevteam.slack.com >>'
@@ -20,7 +21,7 @@ USER = '<< insert user string here. e.g. ABCDE1FG2 >> '
 class SlackMessageDeleter:
 
     DEFAULT_DELETE_DELAY_IN_SECONDS = 0.2
-    FILE_SAVE_FOLDER = 'downloadedfiles'
+    FILE_SAVE_FOLDER = 'downloads'
 
     def __init__(self, workspace, token, cookie, user):
         self.__workspace = workspace
